@@ -60,6 +60,7 @@ fun VoiceSettingsSheet(
     onToggleHandsFree: (Boolean) -> Unit,
     onToggleAutoSilence: (Boolean) -> Unit,
     onToggleSpokenReplies: (Boolean) -> Unit,
+    onToggleWakeWord: (Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -226,6 +227,14 @@ fun VoiceSettingsSheet(
                 checked = preferences.autoSilenceStop,
                 onCheckedChange = onToggleAutoSilence,
                 testTag = "switch_auto_silence"
+            )
+
+            PreferenceSwitchRow(
+                title = "Hands-Free Wake Word (\"Hey Mero\")",
+                subtitle = "Activate Mero automatically when you say \"Hey Mero\" or \"Mero\"",
+                checked = preferences.wakeWordEnabled,
+                onCheckedChange = onToggleWakeWord,
+                testTag = "switch_wake_word"
             )
 
             PreferenceSwitchRow(

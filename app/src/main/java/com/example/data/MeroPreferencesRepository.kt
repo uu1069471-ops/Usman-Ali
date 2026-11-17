@@ -23,6 +23,7 @@ class MeroPreferencesRepository(private val context: Context) {
         val HANDS_FREE_LOOP = booleanPreferencesKey("hands_free_loop")
         val AUTO_SILENCE_STOP = booleanPreferencesKey("auto_silence_stop")
         val SPOKEN_REPLIES = booleanPreferencesKey("spoken_replies")
+        val WAKE_WORD_ENABLED = booleanPreferencesKey("wake_word_enabled")
     }
 
     val preferencesFlow: Flow<MeroPreferences> = context.meroDataStore.data.map { prefs ->
@@ -39,7 +40,8 @@ class MeroPreferencesRepository(private val context: Context) {
             personaStyle = style,
             handsFreeLoop = prefs[Keys.HANDS_FREE_LOOP] ?: true,
             autoSilenceStop = prefs[Keys.AUTO_SILENCE_STOP] ?: true,
-            spokenReplies = prefs[Keys.SPOKEN_REPLIES] ?: true
+            spokenReplies = prefs[Keys.SPOKEN_REPLIES] ?: true,
+            wakeWordEnabled = prefs[Keys.WAKE_WORD_ENABLED] ?: true
         )
     }
 
@@ -61,5 +63,9 @@ class MeroPreferencesRepository(private val context: Context) {
 
     suspend fun setSpokenReplies(enabled: Boolean) {
         context.meroDataStore.edit { it[Keys.SPOKEN_REPLIES] = enabled }
+    }
+
+    suspend fun setWakeWordEnabled(enabled: Boolean) {
+        context.meroDataStore.edit { it[Keys.WAKE_WORD_ENABLED] = enabled }
     }
 }

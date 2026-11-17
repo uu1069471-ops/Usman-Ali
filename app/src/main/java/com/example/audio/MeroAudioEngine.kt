@@ -426,6 +426,67 @@ class MeroAudioEngine(private val context: Context) {
         _spectrum.value = List(BAR_COUNT) { 0.08f }
     }
 
+    suspend fun playWakeChime() = withContext(Dispatchers.IO) {
+        val sampleRate = 24000
+        val noteSamples = (sampleRate * 0.085).toInt()
+        val totalSamples = noteSamples * 2
+        val pcm = ByteArray(totalSamples * 2)
+        val freqs = doubleArrayOf(587.33, 880.0)
+
+        for (noteIdx in 0..1) {
+            val freq = freqs[noteIdx]
+            val startOffset = noteIdx * noteSamples
+            for (i in 0 until noteSamples) {
+                val env = sin(Math.PI * i / noteSamples).toFloat()
+                val sample = (sin(2.0 * Math.PI * freq * i / sampleRate) * 0.28 * env * 32767.0).toInt()
+                    .coerceIn(-32768, 32767)
+                val idx = (startOffset + i) * 2
+                pcm[idx] = (sample and 0xFF).toByte()
+                pcm[idx + 1] = ((sample shr 8) and 0xFF).toByte()
+            }
+        }
+
+        val track = try {
+            AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setSampleRate(sampleRate)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                        .build()
+                )
+                .setBufferSizeInBytes(pcm.size)
+                .setTransferMode(AudioTrack.MODE_STATIC)
+                .build()
+        } catch (_: Exception) {
+            return@withContext
+        }
+
+        try {
+            if (track.state == AudioTrack.STATE_INITIALIZED) {
+                track.write(pcm, 0, pcm.size)
+                track.play()
+                delay(180L)
+            }
+        } catch (_: Exception) {
+        } finally {
+            try {
+                track.stop()
+            } catch (_: Exception) {
+            }
+            try {
+                track.release()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
     fun release() {
         cancelRecording()
         stopPlayback()

@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.audio.MeroAudioEngine
+import com.example.audio.MeroWakeWordEngine
 import com.example.data.MeroAiRepository
 import com.example.data.MeroPreferencesRepository
 import com.example.data.MeroTurnResult
@@ -35,7 +36,8 @@ data class MeroUiState(
     val recordingDurationMs: Long = 0L,
     val errorMessage: String? = null,
     val statusNotice: String? = null,
-    val playingMessageId: String? = null
+    val playingMessageId: String? = null,
+    val isWakeWordListening: Boolean = false
 )
 
 class MeroViewModel(application: Application) : AndroidViewModel(application) {
@@ -49,12 +51,27 @@ class MeroViewModel(application: Application) : AndroidViewModel(application) {
     )
     val uiState: StateFlow<MeroUiState> = _uiState.asStateFlow()
 
+    private val wakeWordEngine = MeroWakeWordEngine(
+        context = application.applicationContext,
+        onWakeWordDetected = { trailingCommand ->
+            handleWakeWordTriggered(trailingCommand)
+        },
+        onUnavailable = { message ->
+            _uiState.update { it.copy(statusNotice = message) }
+            viewModelScope.launch {
+                prefsRepository.setWakeWordEnabled(false)
+            }
+        }
+    )
+
     private var activeTurnJob: Job? = null
+    private var isForegroundActive = true
 
     init {
         viewModelScope.launch {
             prefsRepository.preferencesFlow.collect { prefs ->
                 _uiState.update { it.copy(preferences = prefs) }
+                syncWakeWordListener()
             }
         }
         viewModelScope.launch {
@@ -72,6 +89,20 @@ class MeroViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update { it.copy(recordingDurationMs = ms) }
             }
         }
+        viewModelScope.launch {
+            wakeWordEngine.isListeningForWakeWord.collect { listening ->
+                _uiState.update { it.copy(isWakeWordListening = listening) }
+            }
+        }
+    }
+
+    fun onAppForegroundChanged(inForeground: Boolean) {
+        isForegroundActive = inForeground
+        if (!inForeground) {
+            wakeWordEngine.stop()
+        } else {
+            syncWakeWordListener()
+        }
     }
 
     fun onPermissionResult(granted: Boolean) {
@@ -81,10 +112,39 @@ class MeroViewModel(application: Application) : AndroidViewModel(application) {
                 errorMessage = if (granted) null else it.errorMessage
             )
         }
+        syncWakeWordListener()
     }
 
     fun refreshPermissionState() {
         _uiState.update { it.copy(hasMicPermission = audioEngine.hasRecordPermission()) }
+        syncWakeWordListener()
+    }
+
+    private fun syncWakeWordListener() {
+        val state = _uiState.value
+        val shouldListen = isForegroundActive &&
+            state.hasMicPermission &&
+            state.preferences.wakeWordEnabled &&
+            state.meroState == MeroState.STANDBY
+
+        if (shouldListen) {
+            wakeWordEngine.start()
+        } else {
+            wakeWordEngine.stop()
+        }
+    }
+
+    private fun handleWakeWordTriggered(trailingCommand: String?) {
+        viewModelScope.launch {
+            wakeWordEngine.stop()
+            audioEngine.playWakeChime()
+            delay(140L)
+            if (!trailingCommand.isNullOrBlank()) {
+                sendTextCommand(trailingCommand)
+            } else {
+                startListening()
+            }
+        }
     }
 
     fun onArcCoreTapped() {
@@ -123,6 +183,8 @@ class MeroViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+        wakeWordEngine.stop()
+
         _uiState.update {
             it.copy(
                 meroState = MeroState.LISTENING,
@@ -157,6 +219,7 @@ class MeroViewModel(application: Application) : AndroidViewModel(application) {
                 statusNotice = null
             )
         }
+        syncWakeWordListener()
     }
 
     fun stopListeningAndProcess() {
@@ -178,6 +241,7 @@ class MeroViewModel(application: Application) : AndroidViewModel(application) {
                         statusNotice = "Didn't catch any audio. Tap the core and speak clearly."
                     )
                 }
+                syncWakeWordListener()
                 return@launch
             }
 
@@ -210,6 +274,7 @@ class MeroViewModel(application: Application) : AndroidViewModel(application) {
         val text = rawText.trim()
         if (text.isEmpty()) return
 
+        wakeWordEngine.stop()
         audioEngine.cancelRecording()
         audioEngine.stopPlayback()
         activeTurnJob?.cancel()
@@ -286,11 +351,13 @@ class MeroViewModel(application: Application) : AndroidViewModel(application) {
                 delay(250L)
                 if (_uiState.value.meroState == MeroState.STANDBY) {
                     startListening()
+                    return
                 }
             }
         } else {
             _uiState.update { it.copy(meroState = MeroState.STANDBY) }
         }
+        syncWakeWordListener()
     }
 
     fun replayMessage(message: MeroMessage) {
@@ -360,6 +427,7 @@ class MeroViewModel(application: Application) : AndroidViewModel(application) {
                 playingMessageId = null
             )
         }
+        syncWakeWordListener()
     }
 
     fun setVoiceProfile(profile: MeroVoiceProfile) {
@@ -393,6 +461,12 @@ class MeroViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setWakeWordEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            prefsRepository.setWakeWordEnabled(enabled)
+        }
+    }
+
     fun clearSession() {
         activeTurnJob?.cancel()
         audioEngine.cancelRecording()
@@ -407,6 +481,7 @@ class MeroViewModel(application: Application) : AndroidViewModel(application) {
                 playingMessageId = null
             )
         }
+        syncWakeWordListener()
     }
 
     fun dismissError() {
@@ -417,10 +492,12 @@ class MeroViewModel(application: Application) : AndroidViewModel(application) {
                 meroState = if (it.meroState == MeroState.ERROR) MeroState.STANDBY else it.meroState
             )
         }
+        syncWakeWordListener()
     }
 
     override fun onCleared() {
         super.onCleared()
+        wakeWordEngine.release()
         audioEngine.release()
     }
 }

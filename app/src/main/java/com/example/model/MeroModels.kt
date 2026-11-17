@@ -77,7 +77,8 @@ data class MeroPreferences(
     val personaStyle: MeroPersonaStyle = MeroPersonaStyle.FILMY_CINEMATIC,
     val handsFreeLoop: Boolean = true,
     val autoSilenceStop: Boolean = true,
-    val spokenReplies: Boolean = true
+    val spokenReplies: Boolean = true,
+    val wakeWordEnabled: Boolean = true
 )
 
 data class MeroMessage(

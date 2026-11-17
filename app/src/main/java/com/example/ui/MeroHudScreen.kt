@@ -60,6 +60,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -77,6 +78,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.R
@@ -106,12 +110,37 @@ fun MeroHudScreen(
     var commandText by remember { mutableStateOf("") }
     var showVoiceSheet by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    viewModel.refreshPermissionState()
+                    viewModel.onAppForegroundChanged(true)
+                }
+                Lifecycle.Event.ON_PAUSE -> {
+                    viewModel.onAppForegroundChanged(false)
+                }
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            viewModel.onAppForegroundChanged(false)
+        }
+    }
+
+    var startListeningOnGrant by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
+        val shouldStart = startListeningOnGrant
+        startListeningOnGrant = false
         viewModel.onPermissionResult(granted)
-        if (granted) {
+        if (granted && shouldStart) {
             viewModel.startListening()
         }
     }
@@ -127,6 +156,7 @@ fun MeroHudScreen(
             if (uiState.hasMicPermission) {
                 viewModel.onArcCoreTapped()
             } else {
+                startListeningOnGrant = true
                 permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
             }
         } else {
@@ -232,13 +262,23 @@ fun MeroHudScreen(
                         spectrum = uiState.spectrum,
                         recordingDurationMs = uiState.recordingDurationMs,
                         coreSize = coreSize,
+                        isWakeWordActive = uiState.isWakeWordListening,
                         onTap = handleCoreTap
                     )
 
                     Spacer(modifier = Modifier.height(10.dp))
 
                     // Telemetry Ribbon
-                    TelemetryRibbon(uiState = uiState)
+                    TelemetryRibbon(
+                        uiState = uiState,
+                        onToggleWakeWord = {
+                            if (!uiState.hasMicPermission) {
+                                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            } else {
+                                viewModel.setWakeWordEnabled(!uiState.preferences.wakeWordEnabled)
+                            }
+                        }
+                    )
 
                     Spacer(modifier = Modifier.height(10.dp))
 
@@ -303,6 +343,7 @@ fun MeroHudScreen(
             onToggleHandsFree = viewModel::setHandsFreeLoop,
             onToggleAutoSilence = viewModel::setAutoSilenceStop,
             onToggleSpokenReplies = viewModel::setSpokenReplies,
+            onToggleWakeWord = viewModel::setWakeWordEnabled,
             onDismiss = { showVoiceSheet = false }
         )
     }
@@ -439,7 +480,10 @@ private fun TopTelemetryHeader(
 }
 
 @Composable
-private fun TelemetryRibbon(uiState: MeroUiState) {
+private fun TelemetryRibbon(
+    uiState: MeroUiState,
+    onToggleWakeWord: () -> Unit
+) {
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = ObsidianGlass,
@@ -449,7 +493,7 @@ private fun TelemetryRibbon(uiState: MeroUiState) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 7.dp),
+                .padding(horizontal = 12.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -458,11 +502,40 @@ private fun TelemetryRibbon(uiState: MeroUiState) {
                 style = MaterialTheme.typography.labelSmall,
                 color = FilmyGold
             )
-            Text(
-                text = uiState.preferences.personaStyle.title.uppercase(),
-                style = MaterialTheme.typography.labelSmall,
-                color = ArcCyan
-            )
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = if (uiState.isWakeWordListening) {
+                    PulseEmerald.copy(alpha = 0.16f)
+                } else if (uiState.preferences.wakeWordEnabled) {
+                    ArcCyan.copy(alpha = 0.14f)
+                } else {
+                    Color.Transparent
+                },
+                border = BorderStroke(
+                    1.dp,
+                    if (uiState.isWakeWordListening) PulseEmerald.copy(alpha = 0.6f)
+                    else HairlineCyan
+                ),
+                modifier = Modifier
+                    .minimumInteractiveComponentSize()
+                    .clickable(onClick = onToggleWakeWord)
+                    .testTag("wake_word_toggle")
+            ) {
+                Text(
+                    text = when {
+                        uiState.isWakeWordListening -> "WAKE: HEY MERO"
+                        uiState.preferences.wakeWordEnabled -> "WAKE: ARMED"
+                        else -> "WAKE: OFF"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = when {
+                        uiState.isWakeWordListening -> PulseEmerald
+                        uiState.preferences.wakeWordEnabled -> ArcCyan
+                        else -> MistSlate
+                    },
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+            }
             Text(
                 text = if (uiState.preferences.handsFreeLoop) "LOOP: ON" else "LOOP: MANUAL",
                 style = MaterialTheme.typography.labelSmall,

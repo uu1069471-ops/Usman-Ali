@@ -74,6 +74,7 @@ fun ArcCoreVisualizer(
     spectrum: List<Float>,
     recordingDurationMs: Long,
     coreSize: Dp = 220.dp,
+    isWakeWordActive: Boolean = false,
     onTap: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -294,7 +295,11 @@ fun ArcCoreVisualizer(
         Spacer(modifier = Modifier.height(6.dp))
 
         val caption = when (meroState) {
-            MeroState.STANDBY -> "TAP CORE TO SPEAK"
+            MeroState.STANDBY -> if (isWakeWordActive) {
+                "SAY \"HEY MERO\" OR TAP CORE"
+            } else {
+                "TAP CORE TO SPEAK"
+            }
             MeroState.LISTENING -> {
                 val secs = recordingDurationMs / 1000
                 val tenths = (recordingDurationMs % 1000) / 100
@@ -308,7 +313,11 @@ fun ArcCoreVisualizer(
         Text(
             text = caption,
             style = MaterialTheme.typography.labelLarge,
-            color = if (meroState == MeroState.STANDBY) MistSlate else primaryGlow,
+            color = when {
+                meroState != MeroState.STANDBY -> primaryGlow
+                isWakeWordActive -> ArcCyan
+                else -> MistSlate
+            },
             modifier = Modifier.padding(horizontal = 16.dp)
         )
     }
