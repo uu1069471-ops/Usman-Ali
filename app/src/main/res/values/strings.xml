@@ -1,0 +1,19 @@
+<resources>
+    <string name="app_name">Mero</string>
+    <string name="mero_tagline">HOLOGRAPHIC VOICE INTELLIGENCE</string>
+    <string name="status_standby">STANDBY</string>
+    <string name="status_listening">LISTENING</string>
+    <string name="status_thinking">PROCESSING</string>
+    <string name="status_speaking">SPEAKING</string>
+    <string name="status_error">ATTENTION</string>
+    <string name="action_tap_to_speak">Tap core to speak</string>
+    <string name="action_listening">Listening… tap to send</string>
+    <string name="action_thinking">Mero is thinking…</string>
+    <string name="action_speaking">Mero is speaking… tap to interrupt</string>
+    <string name="mic_permission_title">Microphone Access Required</string>
+    <string name="mic_permission_body">Mero needs microphone access for real-time speech-to-speech conversations. You can also type commands below.</string>
+    <string name="mic_permission_grant">Enable Mic</string>
+    <string name="input_placeholder">Ask Mero anything…</string>
+    <string name="voice_lab_title">Mero Voice Matrix</string>
+    <string name="clear_session">Clear session</string>
+</resources>

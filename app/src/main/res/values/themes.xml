@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="Theme.Mero" parent="android:Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/mero_obsidian</item>
+    </style>
+</resources>

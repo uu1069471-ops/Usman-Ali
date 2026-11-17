@@ -1,0 +1,6 @@
+{
+  "name": "Mero",
+  "description": "Jarvis-style speech-to-speech AI voice assistant with a cinematic female persona.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
